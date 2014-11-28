@@ -6,3 +6,5 @@
 /plugin.xml
 /.settings
 /web-app/WEB-INF
+/.idea/
+*.iml
