@@ -1,4 +1,4 @@
-/* Copyright 2009-2013 SpringSource.
+/* Copyright 2009-2015 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,130 +14,47 @@
  */
 package grails.plugin.springsecurity.ui
 
-import grails.converters.JSON
-
-import org.springframework.dao.DataIntegrityViolationException
+import grails.plugin.springsecurity.ui.strategy.RegistrationCodeStrategy
 
 /**
  * @author <a href='mailto:burt@burtbeckwith.com'>Burt Beckwith</a>
  */
-class RegistrationCodeController extends AbstractS2UiController {
+class RegistrationCodeController extends AbstractS2UiDomainController {
 
-	def edit() {
-		def registrationCode = findById()
-		if (!registrationCode) return
-
-		[registrationCode: registrationCode]
-	}
+	/** Dependency injection for the 'uiRegistrationCodeStrategy' bean. */
+	RegistrationCodeStrategy uiRegistrationCodeStrategy
 
 	def update() {
-		def registrationCode = findById()
-		if (!registrationCode) return
-		if (!versionCheck('registrationCode.label', 'RegistrationCode', registrationCode, [registrationCode: registrationCode])) {
-			return
+		doUpdate { registrationCode ->
+			uiRegistrationCodeStrategy.updateRegistrationCode params, registrationCode
 		}
-
-		if (!springSecurityUiService.updateRegistrationCode(registrationCode, params.username, params.token)) {
-			render view: 'edit', model: [registrationCode: registrationCode]
-			return
-		}
-
-		flash.message = "${message(code: 'default.updated.message', args: [message(code: 'registrationCode.label', default: 'RegistrationCode'), registrationCode.id])}"
-		redirect action: 'edit', id: registrationCode.id
 	}
 
 	def delete() {
-		def registrationCode = findById()
-		if (!registrationCode) return
-
-		try {
-			springSecurityUiService.deleteRegistrationCode registrationCode
-			flash.message = "${message(code: 'default.deleted.message', args: [message(code: 'registrationCode.label', default: 'RegistrationCode'), params.id])}"
-			redirect action: 'search'
-		}
-		catch (DataIntegrityViolationException e) {
-			flash.error = "${message(code: 'default.not.deleted.message', args: [message(code: 'registrationCode.label', default: 'RegistrationCode'), params.id])}"
-			redirect action: 'edit', id: params.id
+		tryDelete { registrationCode ->
+			uiRegistrationCodeStrategy.deleteRegistrationCode registrationCode
 		}
 	}
 
-	def search() {}
-
-	def registrationCodeSearch() {
-
-		boolean useOffset = params.containsKey('offset')
-		setIfMissing 'max', 10, 100
-		setIfMissing 'offset', 0
-
-		int totalCount = RegistrationCode.createCriteria().count() {
-			if(params.token) {
-				ilike('token', params.token + '%')
-			}
-			if(params.username) {
-				ilike('username', params.username + '%')
-			}
+	def search() {
+		if (!isSearch()) {
+			// show the form
+			return
 		}
 
-		Integer max = params.int('max')
-		Integer offset = params.int('offset')
-
-		def results = RegistrationCode.createCriteria().list(max: max, offset: offset) {
-			if(params.token) {
-				ilike('token', params.token + '%')
-			}
-			if(params.username) {
-				ilike('username', params.username + '%')
-			}
-			if(params.sort) {
-				// TODO: Check to see if case matters here, old code used ASC, view may need updating
-				order(params.sort, params.order ?: 'asc')
-			}
+		def results = doSearch { ->
+			like 'token', delegate
+			like 'username', delegate
 		}
 
-		def model = [results: results, totalCount: totalCount, searched: true]
-
-		// add query params to model for paging
-		for (name in ['username', 'token']) {
-			model[name] = params[name]
-		}
-
-		render view: 'search', model: model
+		renderSearch([results: results, totalCount: results.totalCount],
+		             'token', 'username')
 	}
 
-	/**
-	 * Ajax call used by autocomplete textfield.
-	 */
-	def ajaxRegistrationCodeSearch() {
-
-		def jsonData = []
-
-		if (params.term?.length() > 2) {
-			String username = params.term
-
-			setIfMissing 'max', 10, 100
-
-			def results = RegistrationCode.createCriteria().list(max: params.max, sort: 'username') {
-				projections {
-					distinct('username')
-				}
-				ilike('username', "%${params.username}%")
-			}
-
-			for (result in results) {
-				jsonData << [value: result]
-			}
-		}
-
-		render text: jsonData as JSON, contentType: 'text/plain'
-	}
-
-	protected RegistrationCode findById() {
-		def registrationCode = RegistrationCode.get(params.id)
-		if (!registrationCode) {
-			flash.error = "${message(code: 'default.not.found.message', args: [message(code: 'registrationCode.label', default: 'RegistrationCode'), params.id])}"
-			redirect action: 'search'
-		}
-
-		registrationCode
+	protected Class<?> getClazz() { RegistrationCode }
+	protected String getClassLabelCode() { 'registrationCode.label' }
+	protected String getSimpleClassName() { 'RegistrationCode' }
+	protected Map model(registrationCode, String action) {
+		[registrationCode: registrationCode]
 	}
 }
